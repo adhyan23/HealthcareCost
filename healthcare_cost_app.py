@@ -77,7 +77,16 @@ if procedure_query:
     filtered_df = filtered_df.select_dtypes(include=[np.number, 'bool']).copy()
 
     target = 'Avg_Mdcr_Pymt_Amt'
-    features = [col for col in filtered_df.columns if col != target]
+    # Only use features that are independent of the target.
+    # Affordability_Score is derived from Avg_Mdcr_Pymt_Amt, so including it
+    # would leak the target into the model and make evaluation optimistic.
+    candidate_features = [
+        'ZIP',
+        'Households_Median_Income_Dollars',
+        'Households_Mean_Income_Dollars',
+        'population'
+    ]
+    features = [col for col in candidate_features if col in filtered_df.columns]
     X = filtered_df[features]
     y = filtered_df[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -90,13 +99,12 @@ if procedure_query:
     st.success(f"LightGBM MAE: ${mae:.2f} | Typical ZIP Predicted Cost: ${model.predict(example_input)[0]:.2f}")
 
     mean_input = X.mean()
-    def predict_cost(zip_val, median_income, mean_income, pop, affordability):
+    def predict_cost(zip_val, median_income, mean_income, pop):
         input_data = mean_input.copy()
         input_data['ZIP'] = int(zip_val)
         input_data['Households_Median_Income_Dollars'] = median_income
         input_data['Households_Mean_Income_Dollars'] = mean_income
         input_data['population'] = pop
-        input_data['Affordability_Score'] = affordability
         input_df = pd.DataFrame([input_data])[X.columns]
         return model.predict(input_df)[0]
 
@@ -104,10 +112,9 @@ if procedure_query:
         "Households Median Income (Dollars)",
         "Households Mean Income (Dollars)",
         "population",
-        "Affordability_Score",
         "city",
         "state_name"
-    ]].median().dropna().reset_index()
+    ]].median(numeric_only=True).dropna().reset_index()
     zip_group['ZIP'] = zip_group['ZIP'].astype(str).str.zfill(5)
     zip_latlng = merged_df[['ZIP', 'lat', 'lng']].dropna().drop_duplicates()
     zip_latlng['ZIP'] = zip_latlng['ZIP'].astype(str).str.zfill(5)
@@ -117,14 +124,18 @@ if procedure_query:
             zip_val=row['ZIP'],
             median_income=row['Households Median Income (Dollars)'],
             mean_income=row['Households Mean Income (Dollars)'],
-            pop=row['population'],
-            affordability=row['Affordability_Score']
+            pop=row['population']
         ), axis=1
     )
 
     map_df = pd.merge(zip_group, zip_latlng, on='ZIP', how='left').dropna(subset=['lat', 'lng'])
 
     st.subheader("Top 5 Cheapest ZIPs")
+    # Calculate affordability only after prediction so it cannot leak into model training.
+    map_df['Affordability_Score'] = (
+        map_df['Predicted_Cost'] /
+        map_df['Households Median Income (Dollars)']
+    )
     display_cols = ['ZIP', 'Households Median Income (Dollars)', 'Affordability_Score', 'Predicted_Cost', 'city', 'state_name']
     st.dataframe(map_df[display_cols].sort_values("Predicted_Cost").head())
 

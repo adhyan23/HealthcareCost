@@ -85,7 +85,8 @@ if procedure_query:
     # Affordability_Score is derived from Avg_Mdcr_Pymt_Amt, so including it
     # would leak the target into the model and make evaluation optimistic.
     candidate_features = [
-        'ZIP',
+        'lat',
+        'lng',
         'Households_Median_Income_Dollars',
         'Households_Mean_Income_Dollars',
         'population'
@@ -103,9 +104,10 @@ if procedure_query:
     st.success(f"LightGBM MAE: ${mae:.2f} | Typical ZIP Predicted Cost: ${model.predict(example_input)[0]:.2f}")
 
     mean_input = X.mean()
-    def predict_cost(zip_val, median_income, mean_income, pop):
+    def predict_cost(lat_val, lng_val, median_income, mean_income, pop):
         input_data = mean_input.copy()
-        input_data['ZIP'] = int(zip_val)
+        input_data['lat'] = lat_val
+        input_data['lng'] = lng_val
         input_data['Households_Median_Income_Dollars'] = median_income
         input_data['Households_Mean_Income_Dollars'] = mean_income
         input_data['population'] = pop
@@ -126,17 +128,21 @@ if procedure_query:
     zip_group['ZIP'] = zip_group['ZIP'].astype(str).str.zfill(5)
     zip_latlng = merged_df[['ZIP', 'lat', 'lng']].dropna().drop_duplicates()
     zip_latlng['ZIP'] = zip_latlng['ZIP'].astype(str).str.zfill(5)
+    zip_geo = zip_latlng.groupby('ZIP')[['lat', 'lng']].median().reset_index()
+    zip_group = pd.merge(zip_group, zip_geo, on='ZIP', how='left')
+    zip_group = zip_group.dropna(subset=['lat', 'lng'])
 
     zip_group['Predicted_Cost'] = zip_group.apply(
         lambda row: predict_cost(
-            zip_val=row['ZIP'],
+            lat_val=row['lat'],
+            lng_val=row['lng'],
             median_income=row['Households Median Income (Dollars)'],
             mean_income=row['Households Mean Income (Dollars)'],
             pop=row['population']
         ), axis=1
     )
 
-    map_df = pd.merge(zip_group, zip_latlng, on='ZIP', how='left').dropna(subset=['lat', 'lng'])
+    map_df = zip_group
 
     st.subheader("Top 5 Cheapest ZIPs")
     # Calculate affordability only after prediction so it cannot leak into model training.

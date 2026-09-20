@@ -88,6 +88,10 @@ if procedure_query:
         .str.replace(r'[^0-9A-Za-z_]+', '_', regex=True)
         .str.strip('_')
     )
+
+    # Preserve ZIP as the evaluation grouping variable before selecting numeric model features.
+    groups = filtered_df['ZIP'].astype(str).str.zfill(5).reset_index(drop=True)
+    filtered_df = filtered_df.reset_index(drop=True)
     filtered_df = filtered_df.select_dtypes(include=[np.number, 'bool']).copy()
 
     target = 'Avg_Mdcr_Pymt_Amt'
@@ -107,7 +111,6 @@ if procedure_query:
 
     # Keep all observations from the same ZIP in one split.
     # This prevents location-level information from leaking from train to test.
-    groups = filtered_df['ZIP'].astype(str).str.zfill(5)
     splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
     train_idx, test_idx = next(splitter.split(X, y, groups=groups))
     X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]

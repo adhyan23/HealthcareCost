@@ -9,7 +9,7 @@ def to_cpu(tensor):
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.metrics import mean_absolute_error
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -104,7 +104,14 @@ if procedure_query:
     features = [col for col in candidate_features if col in filtered_df.columns]
     X = filtered_df[features]
     y = filtered_df[target]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Keep all observations from the same ZIP in one split.
+    # This prevents location-level information from leaking from train to test.
+    groups = filtered_df['ZIP'].astype(str).str.zfill(5)
+    splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+    train_idx, test_idx = next(splitter.split(X, y, groups=groups))
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
     model = lgb.LGBMRegressor(n_estimators=1000, learning_rate=0.03, num_leaves=64, max_depth=10, subsample=0.8, colsample_bytree=0.8, random_state=42)
     model.fit(X_train, y_train)

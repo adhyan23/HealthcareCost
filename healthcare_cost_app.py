@@ -73,7 +73,11 @@ if procedure_query:
 
     filtered_df = merged_df[merged_df['PROCEDURE'] == matched_procedure].dropna(subset=['Avg_Mdcr_Pymt_Amt', 'ZIP', 'Households Median Income (Dollars)', 'population'])
     filtered_df = filtered_df.drop(columns=['Avg_Mdcr_Alowd_Amt', 'Avg_Tot_Sbmtd_Chrgs'], errors='ignore')
-    filtered_df.columns = filtered_df.columns.str.replace(r'[\s\(\)]', '_', regex=True)
+    filtered_df.columns = (
+        filtered_df.columns
+        .str.replace(r'[^0-9A-Za-z_]+', '_', regex=True)
+        .str.strip('_')
+    )
     filtered_df = filtered_df.select_dtypes(include=[np.number, 'bool']).copy()
 
     target = 'Avg_Mdcr_Pymt_Amt'
@@ -108,13 +112,17 @@ if procedure_query:
         input_df = pd.DataFrame([input_data])[X.columns]
         return model.predict(input_df)[0]
 
-    zip_group = merged_df.groupby("ZIP")[[
+    zip_group = merged_df.groupby("ZIP").agg({
+        "Households Median Income (Dollars)": "median",
+        "Households Mean Income (Dollars)": "median",
+        "population": "median",
+        "city": "first",
+        "state_name": "first"
+    }).dropna(subset=[
         "Households Median Income (Dollars)",
         "Households Mean Income (Dollars)",
-        "population",
-        "city",
-        "state_name"
-    ]].median(numeric_only=True).dropna().reset_index()
+        "population"
+    ]).reset_index()
     zip_group['ZIP'] = zip_group['ZIP'].astype(str).str.zfill(5)
     zip_latlng = merged_df[['ZIP', 'lat', 'lng']].dropna().drop_duplicates()
     zip_latlng['ZIP'] = zip_latlng['ZIP'].astype(str).str.zfill(5)

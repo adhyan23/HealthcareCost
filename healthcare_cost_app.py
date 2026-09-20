@@ -71,7 +71,17 @@ if procedure_query:
     matched_procedure = distinct_procedures[top_idx]
     st.markdown(f"### Matched Procedure: **{matched_procedure}**")
 
-    filtered_df = merged_df[merged_df['PROCEDURE'] == matched_procedure].dropna(subset=['Avg_Mdcr_Pymt_Amt', 'ZIP', 'Households Median Income (Dollars)', 'population'])
+    filtered_df = merged_df[merged_df['PROCEDURE'] == matched_procedure].dropna(
+        subset=[
+            'Avg_Mdcr_Pymt_Amt',
+            'ZIP',
+            'Households Median Income (Dollars)',
+            'Households Mean Income (Dollars)',
+            'population',
+            'lat',
+            'lng'
+        ]
+    )
     filtered_df = filtered_df.drop(columns=['Avg_Mdcr_Alowd_Amt', 'Avg_Tot_Sbmtd_Chrgs'], errors='ignore')
     filtered_df.columns = (
         filtered_df.columns
